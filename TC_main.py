@@ -31,7 +31,7 @@ def TCDaemon():
             for i in range(6):
                 pos[i] = random.randint(0, 0xff)
                 act[i] = random.randint(0, 0xff)
-            time.sleep(1) # 1秒ごとに更新
+                time.sleep(0.2) # 1秒ごとに更新
 
     else:
         while True:
@@ -145,8 +145,8 @@ buttonEmgStop = tk.Button(mainWindow, text = "全ロボット緊急停止", comm
 buttonExit = tk.Button(mainWindow, text = "プログラム終了", command = exitTCApp)
 buttonExit.grid(row=10,column=0,columnspan=2)
 
-threadWindow = threading.Thread(target=windowDaemon)
-threadTC = threading.Thread(target=TCDaemon)
+threadWindow = threading.Thread(target=windowDaemon, daemon=True)
+threadTC = threading.Thread(target=TCDaemon, daemon=True)
 threadWindow.start()
 threadTC.start()
 i = 0
