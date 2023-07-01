@@ -1,15 +1,18 @@
 import tkinter as tk
 
-import time
+# import time
 
 import datetime
-import subprocess
+# import subprocess
 
-PADX_R1 = 10
-PADX_R2 = 10
-PADY_R1 = 10
-PADY_R3 = 10
-PADY_R5 = 10
+import pyserial
+
+# グリッドの大きさ
+GRID_WIDTH = 40
+GRID_HEIGHT = 10
+
+pos=[0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの位置（通信そのまま）
+act=[0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの作業内容（通信そのまま）
 
 def compStart():
     print("start")
@@ -19,6 +22,30 @@ def compEmgStop():
 
 def daemon():
     labelTime.configure(text=datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S'))
+
+    configureTextBuf = ""
+    for i in range(6):
+        actTextBuf = ""
+        if (act[i] == 0x00):
+            actTextBuf = "探索中"
+        else:
+            actTextBuf = "待機中"
+
+        configureTextBuf = str(i + 1) + "号機\n\n" + "場所: " + str(pos[i]) + "\n作業: " + actTextBuf
+
+        if (i == 0):
+            labelR1.configure(text=configureTextBuf)
+        elif (i == 1):
+            labelR2.configure(text=configureTextBuf)
+        elif (i == 2):
+            labelR3.configure(text=configureTextBuf)
+        elif (i == 3):
+            labelR4.configure(text=configureTextBuf)
+        elif (i == 4):
+            labelR5.configure(text=configureTextBuf)
+        elif (i == 5):
+            labelR6.configure(text=configureTextBuf)
+
     mainWindow.after(50, daemon)
 
 # 常時実行し通信・ウィンドウを更新する関数を実行するための最初の関数
@@ -43,18 +70,18 @@ labelTitle.grid(row=0,column=0,columnspan=2)
 labelTime = tk.Label(mainWindow, text='')
 labelTime.grid(row=1,column=0,columnspan=2)
 
-labelR1Title = tk.Label(mainWindow, text='1号機')
-labelR1Title.grid(row=2,column=0)
-labelR2Title = tk.Label(mainWindow, text='2号機')
-labelR2Title.grid(row=2,column=1)
-labelR3Title = tk.Label(mainWindow, text='3号機')
-labelR3Title.grid(row=3,column=0)
-labelR4Title = tk.Label(mainWindow, text='4号機')
-labelR4Title.grid(row=3,column=1)
-labelR5Title = tk.Label(mainWindow, text='5号機')
-labelR5Title.grid(row=4,column=0)
-labelR6Title = tk.Label(mainWindow, text='6号機')
-labelR6Title.grid(row=4,column=1)
+labelR1 = tk.Label(mainWindow, text='1号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+labelR1.grid(row=2,column=0)
+labelR2 = tk.Label(mainWindow, text='2号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+labelR2.grid(row=2,column=1)
+labelR3 = tk.Label(mainWindow, text='3号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+labelR3.grid(row=3,column=0)
+labelR4 = tk.Label(mainWindow, text='4号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+labelR4.grid(row=3,column=1)
+labelR5 = tk.Label(mainWindow, text='5号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+labelR5.grid(row=4,column=0)
+labelR6 = tk.Label(mainWindow, text='6号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+labelR6.grid(row=4,column=1)
 
 buttonStart = tk.Button(mainWindow, text = "通信接続", command = connect)
 buttonStart.grid(row=5,column=0,columnspan=2)
