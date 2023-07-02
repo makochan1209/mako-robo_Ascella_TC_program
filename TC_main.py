@@ -13,7 +13,7 @@ import random
 # 動作モード（シリアル通信を実際に行うか）
 SERIAL_MODE = False
 # 動作モード（ランダムなpos、actを入れるようにするか）
-RANDOM_STATUS_MODE = True
+RANDOM_STATUS_MODE = False
 
 # グリッドの大きさ
 GRID_WIDTH = 40
@@ -22,11 +22,16 @@ GRID_HEIGHT = 10
 pos = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの位置（通信そのまま）
 destPos = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの行き先（通信そのまま）
 act = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの作業内容（通信そのまま）
-recvCom = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの受信通信内容（通信そのまま）
-transCom = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの送信通信内容（通信そのまま）
+recvCom = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの受信通信コマンド
+transCom = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの送信通信コマンド
 connectStatus = [False, False, False, False, False, False]  # 接続できているか
 
-serBuffStr = []
+# [0xA5, 0x5A, 0x80, "Length", "Data", "CD", 0x04]の形式で受信
+# "Data": 0x0*（送信元）, Command, Data
+serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, "CD", 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x05, "CD", 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x21, 0x01, "CD", 0x04]]
+# ボール探索開始, ボールシュート完了, LiDAR露光許可要求
+
+serBuffStr = [] # パケット受信バッファ（1フレームのみ）
 # 管制
 def TCDaemon():
     if RANDOM_STATUS_MODE:
@@ -44,13 +49,38 @@ def TCDaemon():
                 if SERIAL_MODE:
                     buff = ser.read()   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
                     serBuffStr.append(buff)
-                    if (buff == 0x04):
+                    if len(serBuffStr) > 4 and len(serBuffStr) == 4 + serBuffStr[3] + 2:
+                        print("Packet Received")
+                        if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTチェック
+                            print("EOT OK")
+                            # やってない：CDチェック
+                        else:
+                            print("EOT NG")
                         break
                 else:
-                    serBuffStr = [] # デバッグ用コマンド書く
+                    serBuffStr = serStrDebug[random.randint(0, 2)] # デバッグ用コマンド
+                    serBuffStr[4] = random.randint(0, 5)    # 送信元ランダム
+                    time.sleep(0.5)
+                    break
         
             # データ解析
-        
+            recvCom[serBuffStr[4]] = serBuffStr[5]
+            print(str(serBuffStr[4] + 1) + "台目: ")
+            if serBuffStr[5] == 0x00:   # 探索結果報告
+                print("探索結果報告")
+            elif serBuffStr[5] == 0x01: # 位置到達報告
+                print("位置到達報告")
+            elif serBuffStr[5] == 0x02: # ボールシュート報告
+                print("行動報告")
+            elif serBuffStr[5] == 0x20: # 行動指示要求
+                print("行動指示要求")
+            elif serBuffStr[5] == 0x21: # 許可要求
+                print("許可要求")
+            elif serBuffStr[5] == 0x30: # 通信成立報告
+                print("通信成立報告")
+            print("")
+            # CD確認
+
 
 # ボタン操作からの管制への反映
 def compStart():
@@ -86,7 +116,7 @@ def windowDaemon():
         elif (recvCom[i] == 0x21):
             recvCommandBuf = "許可要求"
         elif (recvCom[i] == 0x30):
-            recvCommandBuf = "通信可否報告"
+            recvCommandBuf = "通信成立報告"
         else:
             recvCommandBuf = "なし"
 
