@@ -78,8 +78,13 @@ def TCDaemon():
                 print("探索結果報告")
             elif serBuffStr[5] == 0x01: # 位置到達報告
                 print("位置到達報告")
-            elif serBuffStr[5] == 0x02: # ボールシュート報告
+                pos[serBuffStr[4]] = serBuffStr[6]
+            elif serBuffStr[5] == 0x02: # 行動報告
                 print("行動報告")
+                act[serBuffStr[4]] = serBuffStr[6]
+            elif serBuffStr[5] == 0x03: # ボール有無報告
+                print("ボール有無報告")
+                ballCaught[serBuffStr[4]] = True if serBuffStr[6] == 0x01 else False
             elif serBuffStr[5] == 0x20: # 行動指示要求
                 print("行動指示要求")
             elif serBuffStr[5] == 0x21: # 許可要求
@@ -119,7 +124,11 @@ def windowDaemon():
         elif (act[i] == 0x01):
             actTextBuf = "走行中"
         elif (act[i] == 0x02):
-            actTextBuf = "探索中"
+            actTextBuf = "ボール探索中"
+        elif (act[i] == 0x03):
+            actTextBuf = "ボール発見、キャッチ中"
+        elif (act[i] == 0x04):
+            actTextBuf = "ボールシュート中"
         else:
             actTextBuf = "不明"
 
