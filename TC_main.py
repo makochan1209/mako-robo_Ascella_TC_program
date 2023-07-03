@@ -12,12 +12,12 @@ import random
 
 # 動作モード（シリアル通信を実際に行うか）
 SERIAL_MODE = False
-# 動作モード（ランダムなpos、actを入れるようにするか）
-RANDOM_STATUS_MODE = False
 
 # グリッドの大きさ
 GRID_WIDTH = 40
 GRID_HEIGHT = 10
+
+tweAddr = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06]  # 各機のTWELITEのアドレス（TWELITE交換に対応）
 
 pos = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの位置
 destPos = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの行き先
@@ -32,59 +32,81 @@ connectStatus = [False, False, False, False, False, False]  # 接続できてい
 serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, 0x02, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x04, 0x05, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x21, 0x01, 0x21, 0x04]]
 # ボール探索開始, ボールシュート完了, LiDAR露光許可要求
 
-# 管制
-def TCDaemon():
-    if not RANDOM_STATUS_MODE: # 完全にランダムに数値を入れるだけ
-        while True: # このループは1回の受信パケット＋データ解析ごと
-            # 値の初期化
-            cdBuff = 0
-            serBuffStr = []
+
+# 送信（データは1バイト固定の仕様）、toIDは0x78のときは全台
+def sendTWE(toID, command, data):
+    sendPacket = [0xA5, 0x5A, 0x80, 0x03, tweAddr[toID] if toID != 0x78 else 0x78, command, data, "CD"]
+    cdBuff = 0
+    for i in range(0, len(sendPacket)):
+        if (i >= 4 and i < len(sendPacket) - 1):
+            cdBuff = cdBuff ^ sendPacket[i]
+        elif (i == len(sendPacket) - 1):
+            sendPacket[i] = cdBuff
             
-            # データ受信
-            if not SERIAL_MODE:
-                serStrDebugNum = random.randint(0, len(serStrDebug) - 1)   # どのデバッグコードを持ってくるか
+        ser.write(sendPacket[i])
+
+# 1パケット受信（データは複数バイト可能の仕様）
+def recvTWE():
+    # 値の初期化
+    cdBuff = 0
+    serBuffStr = []
+    
+    # データ受信
+    if not SERIAL_MODE:
+        serStrDebugNum = random.randint(0, len(serStrDebug) - 1)   # どのデバッグコードを持ってくるか
+    
+    
+    if (not SERIAL_MODE) or ser.in_waiting > 0:  # データが来ているか・またはデバッグモードのとき
+        while True: # このループは1バイトごと、パケット受信完了でbreak
+            if SERIAL_MODE:
+                buff = ser.read()   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
             
-            while True: # このループは1バイトごと、パケット受信完了でbreak
-                if SERIAL_MODE:
-                    buff = ser.read()   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
-                
-                else:   # デバッグモード、擬似的に受信
-                    buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
-                    if len(serBuffStr) == 5:    # 送信元データを受信した時
-                        serBuffStr[4] = random.randint(0, 5)    # 送信元をランダムにする
-                    elif len(serBuffStr) >= 5 and len(serBuffStr) == 4 + serBuffStr[3] + 2 and serBuffStr[4] != 0x01:  # EOT => 2台目以降はCD修正（>=5はその後の条件式を通すため）
-                        serBuffStr[len(serBuffStr) - 2] == cdBuff
-                        
-                serBuffStr.append(buff)
-                if len(serBuffStr) > 4:    # データの範囲
-                    if len(serBuffStr) <= 4 + serBuffStr[3]:    # データ終了まで
-                        cdBuff = cdBuff ^ buff   # CD計算
-                    elif len(serBuffStr) == 4 + serBuffStr[3] + 2:    # EOTまで終了
-                        print("Packet Received")
-                        if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTチェック
-                            print("EOT OK")
-                            if cdBuff == serBuffStr[len(serBuffStr) - 2]:
-                                print("CD OK")
-                            else:
-                                print("CD NG")
+            else:   # デバッグモード、擬似的に受信
+                buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
+                if len(serBuffStr) == 5:    # 送信元データを受信した時
+                    serBuffStr[4] = tweAddr[random.randint(0, 5)]    # 送信元をランダムにする
+                elif len(serBuffStr) >= 5 and len(serBuffStr) == 4 + serBuffStr[3] + 2 and serBuffStr[4] != 0x01:  # EOT => 2台目以降はCD修正（>=5はその後の条件式を通すため）
+                    serBuffStr[len(serBuffStr) - 2] == cdBuff
+                    
+            serBuffStr.append(buff)
+            if len(serBuffStr) > 4:    # データの範囲
+                if len(serBuffStr) <= 4 + serBuffStr[3]:    # データ終了まで
+                    cdBuff = cdBuff ^ buff   # CD計算
+                elif len(serBuffStr) == 4 + serBuffStr[3] + 2:    # EOTまで終了
+                    print("Packet Received")
+                    if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTチェック
+                        print("EOT OK")
+                        if cdBuff == serBuffStr[len(serBuffStr) - 2]:
+                            print("CD OK")
                         else:
-                            print("EOT NG")
-                        break
+                            print("CD NG, Expected: " + str(cdBuff) + ", Received: " + str(serBuffStr[len(serBuffStr) - 2]))
+                    else:
+                        print("EOT NG")
+                    break
+    return serBuffStr
+
+# 管制・受信
+def TCDaemon():
+    while True: # このループは1回の受信パケット＋データ解析ごと
+        # 1パケット受信
+        serBuffStr = recvTWE()
         
-            # データ解析
-            recvCom[serBuffStr[4]] = serBuffStr[5]
-            print(str(serBuffStr[4] + 1) + "台目: ")
+        # データ解析
+        if serBuffStr != []:    # パケットが受信できたとき
+            fromID = tweAddr.index(serBuffStr[4])  # 通信相手（n台目→n-1）
+            recvCom[fromID] = serBuffStr[5]
+            print(str(fromID + 1) + "台目: ")
             if serBuffStr[5] == 0x00:   # 探索結果報告
                 print("探索結果報告")
             elif serBuffStr[5] == 0x01: # 位置到達報告
                 print("位置到達報告")
-                pos[serBuffStr[4]] = serBuffStr[6]
+                pos[fromID] = serBuffStr[6]
             elif serBuffStr[5] == 0x02: # 行動報告
                 print("行動報告")
-                act[serBuffStr[4]] = serBuffStr[6]
+                act[fromID] = serBuffStr[6]
             elif serBuffStr[5] == 0x03: # ボール有無報告
                 print("ボール有無報告")
-                ballCaught[serBuffStr[4]] = True if serBuffStr[6] == 0x01 else False
+                ballCaught[fromID] = True if serBuffStr[6] == 0x01 else False
             elif serBuffStr[5] == 0x20: # 行動指示要求
                 print("行動指示要求")
             elif serBuffStr[5] == 0x21: # 許可要求
@@ -93,16 +115,10 @@ def TCDaemon():
                 print("通信成立報告")
             print("")
             
-            if not SERIAL_MODE:
-                time.sleep(0.5) # デバッグモードは実際に読んでいないので待機時間挟む
-                
-    else:   # 完全にランダムに数値代入して画面の動作チェックするやつ
-        while True:
-            # ランダムにデータを生成
-            for i in range(6):
-                pos[i] = random.randint(0, 0xff)
-                act[i] = random.randint(0, 0xff)
-                time.sleep(0.2) # 1秒ごとに更新
+        if SERIAL_MODE:
+            time.sleep(0.001)
+        else:
+            time.sleep(0.5) # デバッグモードは実際に読んでいないので待機時間挟む
 
 
 # ボタン操作からの管制への反映
@@ -155,7 +171,7 @@ def windowDaemon():
             transCommandBuf = "なし"
 
         if connectStatus[i]:
-            configureTextBuf = str(i + 1) + "号機\n\n" + "接続状態: " + "接続済\n\n" + "場所: " + str(pos[i]) + "\n状態: " + actTextBuf + "\n最終通信内容（受信）: " + recvCommandBuf + "\n最終通信内容（送信）: " + transCommandBuf
+            configureTextBuf = str(i + 1) + "号機\n\n" + "接続状態: " + "接続済（TWELITEアドレス: " + str(tweAddr[i]) + "）\n\n場所: " + str(pos[i]) + "\n状態: " + actTextBuf + "\n最終通信内容（受信）: " + recvCommandBuf + "\n最終通信内容（送信）: " + transCommandBuf
         else:
             configureTextBuf = str(i + 1) + "号機\n\n" + "接続状態: " + "未接続"
 
@@ -177,8 +193,19 @@ def windowDaemon():
 # ロボット本体との接続
 def connect():
     buttonConnect.grid_forget()
-    for i in range(6):
-        connectStatus[i] = True
+    
+    if SERIAL_MODE:
+        for i in range(6):
+            print("Connecting: " + str(i + 1))
+            sendTWE(0x78, 0x70, i + 1)
+            while True:
+                serBuffStr = recvTWE()
+                # データ解析をするようにする
+    
+    else:
+        for i in range(6):
+            connectStatus[i] = True
+            
     buttonStart.grid(row=5,column=0,columnspan=2)
     threadTC.start()
 
