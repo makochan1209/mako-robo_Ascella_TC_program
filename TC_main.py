@@ -42,8 +42,11 @@ def sendTWE(toID, command, data):
             cdBuff = cdBuff ^ sendPacket[i]
         elif (i == len(sendPacket) - 1):
             sendPacket[i] = cdBuff
-            
-        ser.write(sendPacket[i])
+        
+        if SERIAL_MODE:    
+            ser.write(sendPacket[i].to_bytes(1, 'big'))
+        else:
+            print(sendPacket[i].to_bytes(1, 'big'))
 
 # 1パケット受信（データは複数バイト可能の仕様）
 def recvTWE():
@@ -59,7 +62,7 @@ def recvTWE():
     if (not SERIAL_MODE) or ser.in_waiting > 0:  # データが来ているか・またはデバッグモードのとき
         while True: # このループは1バイトごと、パケット受信完了でbreak
             if SERIAL_MODE:
-                buff = ser.read()   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
+                buff = int.from_bytes(ser.read(), 'big')   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
             
             else:   # デバッグモード、擬似的に受信
                 buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
@@ -201,6 +204,17 @@ def connect():
             while True:
                 serBuffStr = recvTWE()
                 # データ解析をするようにする
+                if serBuffStr != []:    # パケットが受信できたとき
+                    if serBuffStr[5] == 0x30: # 通信成立報告
+                        if serBuffStr[6] == i + 1:
+                            print("Connected: " + str(i + 1))
+                            print("TWELITE address: " + serBuffStr[4])
+                            connectStatus[i] = True
+                            tweAddr[i] = serBuffStr[4]
+                            break
+                        else:
+                            print("Failed: " + str(i + 1) + "Received: " + str(serBuffStr[6]))
+                            break
     
     else:
         for i in range(6):
@@ -219,13 +233,13 @@ def keyPress(event):
     if event.keycode == 13:
         compStart()
     # Numkey 1のとき
-    elif event.keycode == 49:
+    elif event.keycode == 97:
         connect()
     # Numkey 2のとき
-    elif event.keycode == 50:
+    elif event.keycode == 98:
         compEmgStop()
     # Numkey 9のとき
-    elif event.keycode == 57:
+    elif event.keycode == 105:
         exitTCApp()
 
 # 以下メインルーチン
