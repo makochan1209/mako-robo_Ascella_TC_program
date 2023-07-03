@@ -28,40 +28,47 @@ connectStatus = [False, False, False, False, False, False]  # 接続できてい
 
 # [0xA5, 0x5A, 0x80, "Length", "Data", "CD", 0x04]の形式で受信
 # "Data": 0x0*（送信元）, Command, Data
-serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, "CD", 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x05, "CD", 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x21, 0x01, "CD", 0x04]]
+serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, 0x02, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x05, 0x06, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x21, 0x01, 0x21, 0x04]]
 # ボール探索開始, ボールシュート完了, LiDAR露光許可要求
 
-serBuffStr = [] # パケット受信バッファ（1フレームのみ）
 # 管制
 def TCDaemon():
-    if RANDOM_STATUS_MODE:
-        while True:
-            # ランダムにデータを生成
-            for i in range(6):
-                pos[i] = random.randint(0, 0xff)
-                act[i] = random.randint(0, 0xff)
-                time.sleep(0.2) # 1秒ごとに更新
-
-    else:
-        while True:
+    if not RANDOM_STATUS_MODE: # 完全にランダムに数値を入れるだけ
+        while True: # このループは1回の受信パケット＋データ解析ごと
+            # 値の初期化
+            cdBuff = 0
+            serBuffStr = []
+            
             # データ受信
-            while True:
+            if not SERIAL_MODE:
+                serStrDebugNum = random.randint(0, len(serStrDebug) - 1)   # どのデバッグコードを持ってくるか
+            
+            while True: # このループは1バイトごと、パケット受信完了でbreak
                 if SERIAL_MODE:
                     buff = ser.read()   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
-                    serBuffStr.append(buff)
-                    if len(serBuffStr) > 4 and len(serBuffStr) == 4 + serBuffStr[3] + 2:
+                
+                else:   # デバッグモード、擬似的に受信
+                    buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
+                    if len(serBuffStr) == 5:    # 送信元データを受信した時
+                        serBuffStr[4] = random.randint(0, 5)    # 送信元をランダムにする
+                    elif len(serBuffStr) >= 5 and len(serBuffStr) == 4 + serBuffStr[3] + 2 and serBuffStr[4] != 0x01:  # EOT => 2台目以降はCD修正（>=5はその後の条件式を通すため）
+                        serBuffStr[len(serBuffStr) - 2] == cdBuff
+                        
+                serBuffStr.append(buff)
+                if len(serBuffStr) > 4:    # データの範囲
+                    if len(serBuffStr) <= 4 + serBuffStr[3]:    # データ終了まで
+                        cdBuff = cdBuff ^ buff   # CD計算
+                    elif len(serBuffStr) == 4 + serBuffStr[3] + 2:    # EOTまで終了
                         print("Packet Received")
                         if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTチェック
                             print("EOT OK")
-                            # やってない：CDチェック
+                            if cdBuff == serBuffStr[len(serBuffStr) - 2]:
+                                print("CD OK")
+                            else:
+                                print("CD NG")
                         else:
                             print("EOT NG")
                         break
-                else:
-                    serBuffStr = serStrDebug[random.randint(0, 2)] # デバッグ用コマンド
-                    serBuffStr[4] = random.randint(0, 5)    # 送信元ランダム
-                    time.sleep(0.5)
-                    break
         
             # データ解析
             recvCom[serBuffStr[4]] = serBuffStr[5]
@@ -79,7 +86,17 @@ def TCDaemon():
             elif serBuffStr[5] == 0x30: # 通信成立報告
                 print("通信成立報告")
             print("")
-            # CD確認
+            
+            if not SERIAL_MODE:
+                time.sleep(0.5) # デバッグモードは実際に読んでいないので待機時間挟む
+                
+    else:   # 完全にランダムに数値代入して画面の動作チェックするやつ
+        while True:
+            # ランダムにデータを生成
+            for i in range(6):
+                pos[i] = random.randint(0, 0xff)
+                act[i] = random.randint(0, 0xff)
+                time.sleep(0.2) # 1秒ごとに更新
 
 
 # ボタン操作からの管制への反映
@@ -153,6 +170,7 @@ def connect():
     for i in range(6):
         connectStatus[i] = True
     buttonStart.grid(row=5,column=0,columnspan=2)
+    threadTC.start()
 
 def exitTCApp():
     if SERIAL_MODE:
@@ -230,6 +248,5 @@ mainWindow.bind("<KeyPress>", keyPress)
 threadWindow = threading.Thread(target=windowDaemon, daemon=True)
 threadTC = threading.Thread(target=TCDaemon, daemon=True)
 threadWindow.start()
-threadTC.start()
 i = 0
 mainWindow.mainloop()
