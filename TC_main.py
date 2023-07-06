@@ -33,9 +33,19 @@ serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, 0x02, 0x04], [0xA5, 0x
 # ボール探索開始, ボールシュート完了, LiDAR露光許可要求
 
 
-# 送信（データは1バイト固定の仕様）、toIDは0x78のときは全台
+# 送信、toIDは0x78のときは全台
 def sendTWE(toID, command, data):
-    sendPacket = [0xA5, 0x5A, 0x80, 0x03, tweAddr[toID] if toID != 0x78 else 0x78, command, data, "CD"]
+    sendPacket = [0xA5, 0x5A, 0x80, 0x03, tweAddr[toID] if toID != 0x78 else 0x78, command]
+
+    if type(data) is complex:
+        sendPacket[3] = 0x02 + len(data)
+        sendPacket.extend(data)
+        sendPacket.extend(["CD"])
+
+    else:
+        sendPacket.extend([data, "CD"])
+
+
     cdBuff = 0
     for i in range(0, len(sendPacket)):
         if (i >= 4 and i < len(sendPacket) - 1):
