@@ -82,7 +82,7 @@ def recvTWE():
                         if cdBuff == serBuffStr[len(serBuffStr) - 2]:
                             print("CD OK")
                         else:
-                            print("CD NG, Expected: " + str(cdBuff) + ", Received: " + str(serBuffStr[len(serBuffStr) - 2]))
+                            print("CD NG, Expected: " + hex(cdBuff) + ", Received: " + hex(serBuffStr[len(serBuffStr) - 2]))
                     else:
                         print("EOT NG")
                     break
@@ -174,7 +174,7 @@ def windowDaemon():
             transCommandBuf = "なし"
 
         if connectStatus[i]:
-            configureTextBuf = str(i + 1) + "号機\n\n" + "接続状態: " + "接続済（TWELITEアドレス: " + str(tweAddr[i]) + "）\n\n場所: " + str(pos[i]) + "\n状態: " + actTextBuf + "\n最終通信内容（受信）: " + recvCommandBuf + "\n最終通信内容（送信）: " + transCommandBuf
+            configureTextBuf = str(i + 1) + "号機\n\n" + "接続状態: " + "接続済（TWELITEアドレス: " + hex(tweAddr[i]) + "）\n\n場所: " + hex(pos[i]) + "\n状態: " + actTextBuf + "\n最終通信内容（受信）: " + recvCommandBuf + "\n最終通信内容（送信）: " + transCommandBuf
         else:
             configureTextBuf = str(i + 1) + "号機\n\n" + "接続状態: " + "未接続"
 
@@ -208,7 +208,7 @@ def connect():
                     if serBuffStr[5] == 0x30: # 通信成立報告
                         if serBuffStr[6] == i + 1:
                             print("Connected: " + str(i + 1))
-                            print("TWELITE address: " + serBuffStr[4])
+                            print("TWELITE address: " + hex(serBuffStr[4]))
                             connectStatus[i] = True
                             tweAddr[i] = serBuffStr[4]
                             break
