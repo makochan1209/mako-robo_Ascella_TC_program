@@ -44,9 +44,11 @@ def sendTWE(toID, command, data):
             sendPacket[i] = cdBuff
         
         if SERIAL_MODE:    
-            ser.write(sendPacket[i].to_bytes(1, 'big'))
+            # ser.write(sendPacket[i].to_bytes(1, 'big'))
+            ser.write(struct.pack("<B", sendPacket[i]))
         else:
-            print(sendPacket[i].to_bytes(1, 'big'))
+            # print(sendPacket[i].to_bytes(1, 'big'))
+            print(struct.pack("<B", sendPacket[i]))
 
 # 1パケット受信（データは複数バイト可能の仕様）
 def recvTWE():
@@ -62,7 +64,8 @@ def recvTWE():
     if (not SERIAL_MODE) or ser.in_waiting > 0:  # データが来ているか・またはデバッグモードのとき
         while True: # このループは1バイトごと、パケット受信完了でbreak
             if SERIAL_MODE:
-                buff = int.from_bytes(ser.read(), 'big')   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
+                # buff = int.from_bytes(ser.read(), 'big')   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
+                buff = struct.unpack("<B", ser.read())[0]
             
             else:   # デバッグモード、擬似的に受信
                 buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
@@ -219,6 +222,7 @@ def connect():
     else:
         for i in range(6):
             connectStatus[i] = True
+            sendTWE(0x78, 0x70, i + 1)
             
     buttonStart.grid(row=5,column=0,columnspan=2)
     threadTC.start()
