@@ -252,6 +252,7 @@ def connect():
         for i in range(6):
             print("Connecting: " + str(i + 1))
             sendTWE(0x78, 0x70, i + 1)
+            c = 0
             while True:
                 serBuffStr = recvTWE()
                 # データ解析をするようにする
@@ -266,6 +267,12 @@ def connect():
                         else:
                             print("Failed: " + str(i + 1) + "Received: " + str(serBuffStr[6]))
                             break
+                time.sleep(0.01)
+                c += 1
+                if c > 100:
+                    print("No Connection: " + str(i + 1))
+                    break
+                print()
     
     else:
         for i in range(6):
