@@ -9,9 +9,11 @@ import serial
 import struct
 import threading
 import random
+import sys
+import glob
 
 # 動作モード（シリアル通信を実際に行うか）
-SERIAL_MODE = False
+SERIAL_MODE = True
 
 # グリッドの大きさ
 GRID_WIDTH = 40
@@ -32,6 +34,33 @@ connectStatus = [False, False, False, False, False, False]  # 接続できてい
 serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, 0x02, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x04, 0x05, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x21, 0x01, 0x21, 0x04]]
 # ボール探索開始, ボールシュート完了, LiDAR露光許可要求
 
+def serial_ports_detect():
+    """ Lists serial port names
+ 
+        :raises EnvironmentError:
+            On unsupported or unknown platforms
+        :returns:
+            A list of the serial ports available on the system
+    """
+    if sys.platform.startswith('win'):
+        ports = ['COM%s' % (i + 1) for i in range(256)]
+    elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
+        # this excludes your current terminal "/dev/tty"
+        ports = glob.glob('/dev/tty[A-Za-z]*')
+    elif sys.platform.startswith('darwin'):
+        ports = glob.glob('/dev/tty.*')
+    else:
+        raise EnvironmentError('Unsupported platform')
+ 
+    result = []
+    for port in ports:
+        try:
+            s = serial.Serial(port)
+            s.close()
+            result.append(port)
+        except (OSError, serial.SerialException):
+            pass
+    return result
 
 # 送信、toIDは0x78のときは全台
 def sendTWE(toID, command, data):
@@ -271,7 +300,22 @@ def keyPress(event):
 
 # シリアル通信（TWE-Lite）
 if SERIAL_MODE:
-    use_port = '/dev/serial0'
+    port_result = serial_ports_detect()
+    if port_result == []:   # ポートが見つからないとき
+        print("No port found")
+        exit()
+    elif port_result.count('/dev/ttyAMA0') > 0:   # Linuxのとき
+        use_port = '/dev/ttyAMA0'
+    else:   # Windowsのとき
+        if len(port_result) == 1:
+            use_port = port_result[0]
+        else:
+            for port in port_result:
+                print(port)
+                print("Enter the port number you want to use")
+                use_port = input()
+                
+    print("Port " + use_port + " is used")
 
     ser = serial.Serial(use_port)
     ser.baudrate = 115200
