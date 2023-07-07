@@ -53,12 +53,16 @@ def sendTWE(toID, command, data):
         elif (i == len(sendPacket) - 1):
             sendPacket[i] = cdBuff
         
-        if SERIAL_MODE:    
+        # if SERIAL_MODE:    
             # ser.write(sendPacket[i].to_bytes(1, 'big'))
-            ser.write(struct.pack("<B", sendPacket[i]))
-        else:
+        #     ser.write(struct.pack("<B", sendPacket[i]))
+        # else:
             # print(sendPacket[i].to_bytes(1, 'big'))
-            print(struct.pack("<B", sendPacket[i]))
+        #     print(struct.pack("<B", sendPacket[i]))
+    if SERIAL_MODE:    
+        ser.write(b''.join([struct.pack("<B", val) for val in sendPacket]))
+    else:
+        print(b''.join([struct.pack("<B", val) for val in sendPacket]))
 
 # 1パケット受信（データは複数バイト可能の仕様）
 def recvTWE():
