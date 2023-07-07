@@ -19,7 +19,7 @@ SERIAL_MODE = False
 GRID_WIDTH = 40
 GRID_HEIGHT = 10
 
-ROBOT_NUM = 2    # ロボットの台数（1台から6台に対応、2台と6台のみ動作確認）
+ROBOT_NUM = 6    # ロボットの台数（1台から6台に対応、2台と6台のみ動作確認）
 
 tweAddr = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06]  # 各機のTWELITEのアドレス（TWELITE交換に対応）
 
@@ -33,7 +33,7 @@ connectStatus = [False, False, False, False, False, False]  # 接続できてい
 
 # [0xA5, 0x5A, 0x80, "Length", "Data", "CD", 0x04]の形式で受信
 # "Data": 0x0*（送信元）, Command, Data
-serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, 0x02, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x04, 0x05, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x21, 0x01, 0x21, 0x04]]
+serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, 0x02, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x04, 0x07, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x21, 0x01, 0x21, 0x04]]
 # ボール探索開始, ボールシュート完了, LiDAR露光許可要求
 
 def serial_ports_detect():
@@ -116,7 +116,7 @@ def recvTWE():
             if len(serBuffStr) == 5:    # 送信元データを受信した時
                 serBuffStr[4] = tweAddr[random.randint(0, ROBOT_NUM - 1)]    # 送信元をランダムにする
             elif len(serBuffStr) >= 5 and len(serBuffStr) == 4 + serBuffStr[3] + 2 and serBuffStr[4] != 0x01:  # EOT => 2台目以降はCD修正（>=5はその後の条件式を通すため）
-                serBuffStr[len(serBuffStr) - 2] == cdBuff
+                serBuffStr[len(serBuffStr) - 2] = cdBuff
                 
         serBuffStr.append(buff)
         if len(serBuffStr) > 4:    # データの範囲
@@ -160,6 +160,7 @@ def TCDaemon():
             elif serBuffStr[5] == 0x02: # 行動報告
                 print("行動報告")
                 act[fromID] = serBuffStr[6]
+                print("行動内容: " + hex(act[fromID]))
             elif serBuffStr[5] == 0x03: # ボール有無報告
                 print("ボール有無報告")
                 ballCaught[fromID] = True if serBuffStr[6] == 0x01 else False
