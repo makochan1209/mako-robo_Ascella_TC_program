@@ -13,11 +13,13 @@ import sys
 import glob
 
 # 動作モード（シリアル通信を実際に行うか）
-SERIAL_MODE = True
+SERIAL_MODE = False
 
 # グリッドの大きさ
 GRID_WIDTH = 40
 GRID_HEIGHT = 10
+
+ROBOT_NUM = 2    # ロボットの台数（1台から6台に対応、2台と6台のみ動作確認）
 
 tweAddr = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06]  # 各機のTWELITEのアドレス（TWELITE交換に対応）
 
@@ -112,7 +114,7 @@ def recvTWE():
         else:   # デバッグモード、擬似的に受信
             buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
             if len(serBuffStr) == 5:    # 送信元データを受信した時
-                serBuffStr[4] = tweAddr[random.randint(0, 5)]    # 送信元をランダムにする
+                serBuffStr[4] = tweAddr[random.randint(0, ROBOT_NUM - 1)]    # 送信元をランダムにする
             elif len(serBuffStr) >= 5 and len(serBuffStr) == 4 + serBuffStr[3] + 2 and serBuffStr[4] != 0x01:  # EOT => 2台目以降はCD修正（>=5はその後の条件式を通すため）
                 serBuffStr[len(serBuffStr) - 2] == cdBuff
                 
@@ -187,7 +189,7 @@ def windowDaemon():
     labelTime.configure(text=datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S'))
 
     configureTextBuf = ""
-    for i in range(6):
+    for i in range(ROBOT_NUM):
         actTextBuf = ""
         if (act[i] == 0x00):
             actTextBuf = "待機中"
@@ -249,7 +251,7 @@ def connect():
     buttonConnect.grid_forget()
     
     if SERIAL_MODE:
-        for i in range(6):
+        for i in range(ROBOT_NUM):
             print("Connecting: " + str(i + 1))
             sendTWE(0x78, 0x70, i + 1)
             c = 0
@@ -261,25 +263,27 @@ def connect():
                         if serBuffStr[6] == i + 1:
                             print("Connected: " + str(i + 1))
                             print("TWELITE address: " + hex(serBuffStr[4]))
+                            print()
                             connectStatus[i] = True
                             tweAddr[i] = serBuffStr[4]
                             break
                         else:
                             print("Failed: " + str(i + 1) + "Received: " + str(serBuffStr[6]))
+                            print()
                             break
                 time.sleep(0.01)
                 c += 1
                 if c > 100:
                     print("No Connection: " + str(i + 1))
+                    print()
                     break
-                print()
     
     else:
-        for i in range(6):
+        for i in range(ROBOT_NUM):
             connectStatus[i] = True
             sendTWE(0x78, 0x70, i + 1)
             
-    buttonStart.grid(row=5,column=0,columnspan=2)
+    buttonStart.grid(row=6,column=0,columnspan=2)
     threadTC.start()
 
 def exitTCApp():
@@ -348,16 +352,21 @@ labelTime.grid(row=1,column=0,columnspan=2)
 
 labelR1 = tk.Label(mainWindow, text='1号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
 labelR1.grid(row=2,column=0)
-labelR2 = tk.Label(mainWindow, text='2号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
-labelR2.grid(row=2,column=1)
-labelR3 = tk.Label(mainWindow, text='3号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
-labelR3.grid(row=3,column=0)
-labelR4 = tk.Label(mainWindow, text='4号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
-labelR4.grid(row=3,column=1)
-labelR5 = tk.Label(mainWindow, text='5号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
-labelR5.grid(row=4,column=0)
-labelR6 = tk.Label(mainWindow, text='6号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
-labelR6.grid(row=4,column=1)
+if ROBOT_NUM >= 2:
+    labelR2 = tk.Label(mainWindow, text='2号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+    labelR2.grid(row=2,column=1)
+if ROBOT_NUM >= 3:
+    labelR3 = tk.Label(mainWindow, text='3号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+    labelR3.grid(row=3,column=0)
+if ROBOT_NUM >= 4:
+    labelR4 = tk.Label(mainWindow, text='4号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+    labelR4.grid(row=3,column=1)
+if ROBOT_NUM >= 5:
+    labelR5 = tk.Label(mainWindow, text='5号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+    labelR5.grid(row=4,column=0)
+if ROBOT_NUM >= 6:
+    labelR6 = tk.Label(mainWindow, text='6号機', anchor=tk.N, width=GRID_WIDTH, height=GRID_HEIGHT)
+    labelR6.grid(row=4,column=1)
 
 buttonConnect = tk.Button(mainWindow, text = "通信接続 (Num 1)", command = connect)
 buttonConnect.grid(row=5,column=0,columnspan=2)
