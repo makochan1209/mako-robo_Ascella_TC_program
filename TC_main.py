@@ -72,7 +72,7 @@ def recvTWE():
     
     
     if (not SERIAL_MODE) or ser.in_waiting > 0:  # データが来ているか・またはデバッグモードのとき
-        while True: # このループは1バイトごと、パケット受信完了でbreak
+        while True and ((not SERIAL_MODE) or ser.in_waiting > 0): # このループは1バイトごと、パケット受信完了でbreak
             if SERIAL_MODE:
                 # buff = int.from_bytes(ser.read(), 'big')   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
                 buff = struct.unpack("<B", ser.read())[0]
@@ -99,6 +99,12 @@ def recvTWE():
                     else:
                         print("EOT NG")
                     break
+    if serBuffStr != [] and len(serBuffStr) < 8:    # パケットが短すぎる場合は破棄
+        serBuffStr = []
+        print("Packet too short")
+    if serBuffStr != [] and serBuffStr[4] == 0xdb:   # 応答メッセージなので省略
+        serBuffStr = []
+        print("Response Message")
     return serBuffStr
 
 # 管制・受信
