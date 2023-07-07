@@ -71,34 +71,33 @@ def recvTWE():
         serStrDebugNum = random.randint(0, len(serStrDebug) - 1)   # どのデバッグコードを持ってくるか
     
     
-    if (not SERIAL_MODE) or ser.in_waiting > 0:  # データが来ているか・またはデバッグモードのとき
-        while True and ((not SERIAL_MODE) or ser.in_waiting > 0): # このループは1バイトごと、パケット受信完了でbreak
-            if SERIAL_MODE:
-                # buff = int.from_bytes(ser.read(), 'big')   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
-                buff = struct.unpack("<B", ser.read())[0]
-            
-            else:   # デバッグモード、擬似的に受信
-                buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
-                if len(serBuffStr) == 5:    # 送信元データを受信した時
-                    serBuffStr[4] = tweAddr[random.randint(0, 5)]    # 送信元をランダムにする
-                elif len(serBuffStr) >= 5 and len(serBuffStr) == 4 + serBuffStr[3] + 2 and serBuffStr[4] != 0x01:  # EOT => 2台目以降はCD修正（>=5はその後の条件式を通すため）
-                    serBuffStr[len(serBuffStr) - 2] == cdBuff
-                    
-            serBuffStr.append(buff)
-            if len(serBuffStr) > 4:    # データの範囲
-                if len(serBuffStr) <= 4 + serBuffStr[3]:    # データ終了まで
-                    cdBuff = cdBuff ^ buff   # CD計算
-                elif len(serBuffStr) == 4 + serBuffStr[3] + 2:    # EOTまで終了
-                    print("Packet Received")
-                    if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTチェック
-                        print("EOT OK")
-                        if cdBuff == serBuffStr[len(serBuffStr) - 2]:
-                            print("CD OK")
-                        else:
-                            print("CD NG, Expected: " + hex(cdBuff) + ", Received: " + hex(serBuffStr[len(serBuffStr) - 2]))
+    while (not SERIAL_MODE) or ser.in_waiting > 0: # データが来ているか・またはデバッグモードのとき。このループは1バイトごと、パケット受信完了でbreak
+        if SERIAL_MODE:
+            # buff = int.from_bytes(ser.read(), 'big')   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
+            buff = struct.unpack("<B", ser.read())[0]
+        
+        else:   # デバッグモード、擬似的に受信
+            buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
+            if len(serBuffStr) == 5:    # 送信元データを受信した時
+                serBuffStr[4] = tweAddr[random.randint(0, 5)]    # 送信元をランダムにする
+            elif len(serBuffStr) >= 5 and len(serBuffStr) == 4 + serBuffStr[3] + 2 and serBuffStr[4] != 0x01:  # EOT => 2台目以降はCD修正（>=5はその後の条件式を通すため）
+                serBuffStr[len(serBuffStr) - 2] == cdBuff
+                
+        serBuffStr.append(buff)
+        if len(serBuffStr) > 4:    # データの範囲
+            if len(serBuffStr) <= 4 + serBuffStr[3]:    # データ終了まで
+                cdBuff = cdBuff ^ buff   # CD計算
+            elif len(serBuffStr) == 4 + serBuffStr[3] + 2:    # EOTまで終了
+                print("Packet Received")
+                if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTチェック
+                    print("EOT OK")
+                    if cdBuff == serBuffStr[len(serBuffStr) - 2]:
+                        print("CD OK")
                     else:
-                        print("EOT NG")
-                    break
+                        print("CD NG, Expected: " + hex(cdBuff) + ", Received: " + hex(serBuffStr[len(serBuffStr) - 2]))
+                else:
+                    print("EOT NG")
+                break
     if serBuffStr != [] and len(serBuffStr) < 8:    # パケットが短すぎる場合は破棄
         serBuffStr = []
         print("Packet too short")
