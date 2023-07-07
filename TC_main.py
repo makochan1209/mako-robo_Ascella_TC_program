@@ -12,6 +12,8 @@ import random
 import sys
 import glob
 
+import serial.tools.list_ports
+
 # 動作モード（シリアル通信を実際に行うか）
 SERIAL_MODE = False
 
@@ -44,6 +46,8 @@ def serial_ports_detect():
         :returns:
             A list of the serial ports available on the system
     """
+    
+    """
     if sys.platform.startswith('win'):
         ports = ['COM%s' % (i + 1) for i in range(256)]
     elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
@@ -62,6 +66,16 @@ def serial_ports_detect():
             result.append(port)
         except (OSError, serial.SerialException):
             pass
+    return result
+    """
+    
+    result = []
+    ports = list(serial.tools.list_ports.comports())
+    for p in ports:
+        if p.vid == 0x0403 and p.pid == 0x6001:
+            result.append(p.device)
+            print(p.device)
+            print(p.serial_number)
     return result
 
 # 送信、toIDは0x78のときは全台
@@ -312,6 +326,7 @@ def keyPress(event):
 
 # シリアル通信（TWE-Lite）
 if SERIAL_MODE:
+    """
     port_result = serial_ports_detect()
     if port_result == []:   # ポートが見つからないとき
         print("No port found")
@@ -319,6 +334,19 @@ if SERIAL_MODE:
     elif port_result.count('/dev/ttyAMA0') > 0:   # Linuxのとき
         use_port = '/dev/ttyAMA0'
     else:   # Windowsのとき
+        if len(port_result) == 1:
+            use_port = port_result[0]
+        else:
+            for port in port_result:
+                print(port)
+                print("Enter the port number you want to use")
+                use_port = input()
+    """
+    port_result = serial_ports_detect()
+    if port_result == []:   # ポートが見つからないとき
+        print("No port found")
+        exit()
+    else:
         if len(port_result) == 1:
             use_port = port_result[0]
         else:
