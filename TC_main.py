@@ -265,33 +265,34 @@ def windowDaemon():
 def connect():
     buttonConnect.grid_forget()
     
-    if SERIAL_MODE:
-        for i in range(ROBOT_NUM):
-            print("Connecting: " + str(i + 1))
-            sendTWE(0x78, 0x70, i + 1)
-            c = 0
-            while True:
-                serBuffStr = recvTWE()
-                # データ解析をするようにする
-                if serBuffStr != []:    # パケットが受信できたとき
-                    if serBuffStr[5] == 0x30: # 通信成立報告
-                        if serBuffStr[6] == i + 1:
-                            print("Connected: " + str(i + 1))
-                            print("TWELITE address: " + hex(serBuffStr[4]))
-                            print()
-                            connectStatus[i] = True
-                            tweAddr[i] = serBuffStr[4]
-                            break
-                        else:
-                            print("Failed: " + str(i + 1) + "Received: " + str(serBuffStr[6]))
-                            print()
-                            break
-                time.sleep(0.01)
-                c += 1
-                if c > 100:
-                    print("No Connection: " + str(i + 1))
-                    print()
-                    break
+    if SERIAL_MODE: # シリアル通信のとき
+        for i in range(ROBOT_NUM):  # 1台ずつ接続
+            if not connectStatus[i]:    # 未接続のとき
+                print("Connecting: " + str(i + 1))
+                sendTWE(0x78, 0x70, i + 1)
+                c = 0
+                while True:
+                    serBuffStr = recvTWE()
+                    # データ解析をするようにする
+                    if serBuffStr != []:    # パケットが受信できたとき
+                        if serBuffStr[5] == 0x30: # 通信成立報告
+                            if serBuffStr[6] == i + 1:
+                                print("Connected: " + str(i + 1))
+                                print("TWELITE address: " + hex(serBuffStr[4]))
+                                print()
+                                connectStatus[i] = True
+                                tweAddr[i] = serBuffStr[4]
+                                break
+                            else:
+                                print("Failed: " + str(i + 1) + "Received: " + str(serBuffStr[6]))
+                                print()
+                                break
+                    time.sleep(0.01)
+                    c += 1
+                    if c > 100:
+                        print("No Connection: " + str(i + 1))
+                        print()
+                        break
     
     else:
         for i in range(ROBOT_NUM):
@@ -299,7 +300,9 @@ def connect():
             sendTWE(0x78, 0x70, i + 1)
             
     buttonStart.grid(row=6,column=0,columnspan=2)
-    threadTC.start()
+    
+    if threadTC.is_alive() == False:    # 通信スレッドが動いていないとき（初回）
+        threadTC.start()
 
 def exitTCApp():
     if SERIAL_MODE:
