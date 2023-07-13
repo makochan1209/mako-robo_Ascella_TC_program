@@ -6,16 +6,11 @@ import datetime
 # import subprocess
 
 import serial
-import struct
 import threading
-import random
-import sys
-import glob
 
 import serial.tools.list_ports
 
-# 動作モード（シリアル通信を実際に行うか）
-SERIAL_MODE = False
+import lib.twelite as twelite
 
 # グリッドの大きさ
 GRID_WIDTH = 40
@@ -33,138 +28,11 @@ recvCom = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの受信通信コ�
 transCom = [0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6] # ロボットの送信通信コマンド
 connectStatus = [False, False, False, False, False, False]  # 接続できているか
 
-# [0xA5, 0x5A, 0x80, "Length", "Data", "CD", 0x04]の形式で受信
-# "Data": 0x0*（送信元）, Command, Data
-serStrDebug = [[0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x01, 0x02, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x02, 0x04, 0x07, 0x04], [0xA5, 0x5A, 0x80, 0x03, 0x01, 0x21, 0x01, 0x21, 0x04]]
-# ボール探索開始, ボールシュート完了, LiDAR露光許可要求
-
-def serial_ports_detect():
-    """ Lists serial port names
- 
-        :raises EnvironmentError:
-            On unsupported or unknown platforms
-        :returns:
-            A list of the serial ports available on the system
-    """
-    
-    """
-    if sys.platform.startswith('win'):
-        ports = ['COM%s' % (i + 1) for i in range(256)]
-    elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
-        # this excludes your current terminal "/dev/tty"
-        ports = glob.glob('/dev/tty[A-Za-z]*')
-    elif sys.platform.startswith('darwin'):
-        ports = glob.glob('/dev/tty.*')
-    else:
-        raise EnvironmentError('Unsupported platform')
- 
-    result = []
-    for port in ports:
-        try:
-            s = serial.Serial(port)
-            s.close()
-            result.append(port)
-        except (OSError, serial.SerialException):
-            pass
-    return result
-    """
-    
-    if sys.platform.startswith('win'):
-        result = []
-        ports = list(serial.tools.list_ports.comports())
-        for p in ports:
-            if p.vid == 0x0403 and (p.pid == 0x6001 or p.pid == 0x6015): # TWE-Lite-R
-                result.append(p.device)
-                print(p.device)
-                print(p.serial_number)
-    elif sys.platform.startswith('linux'):
-        result = glob.glob('/dev/serial0')  # GPIO UART
-    else:
-        print('Unsupported platform')
-    return result
-
-# 送信、toIDは0x78のときは全台
-def sendTWE(toID, command, data):
-    sendPacket = [0xA5, 0x5A, 0x80, 0x03, tweAddr[toID] if toID != 0x78 else 0x78, command]
-
-    if type(data) is complex:
-        sendPacket[3] = 0x02 + len(data)
-        sendPacket.extend(data)
-        sendPacket.extend(["CD"])
-
-    else:
-        sendPacket.extend([data, "CD"])
-
-
-    cdBuff = 0
-    for i in range(0, len(sendPacket)):
-        if (i >= 4 and i < len(sendPacket) - 1):
-            cdBuff = cdBuff ^ sendPacket[i]
-        elif (i == len(sendPacket) - 1):
-            sendPacket[i] = cdBuff
-        
-        # if SERIAL_MODE:    
-            # ser.write(sendPacket[i].to_bytes(1, 'big'))
-        #     ser.write(struct.pack("<B", sendPacket[i]))
-        # else:
-            # print(sendPacket[i].to_bytes(1, 'big'))
-        #     print(struct.pack("<B", sendPacket[i]))
-    if SERIAL_MODE:    
-        ser.write(b''.join([struct.pack("<B", val) for val in sendPacket]))
-    else:
-        print(b''.join([struct.pack("<B", val) for val in sendPacket]))
-
-# 1パケット受信（データは複数バイト可能の仕様）
-def recvTWE():
-    # 値の初期化
-    cdBuff = 0
-    serBuffStr = []
-    
-    # データ受信
-    if not SERIAL_MODE:
-        serStrDebugNum = random.randint(0, len(serStrDebug) - 1)   # どのデバッグコードを持ってくるか
-    
-    
-    while (not SERIAL_MODE) or ser.in_waiting > 0: # データが来ているか・またはデバッグモードのとき。このループは1バイトごと、パケット受信完了でbreak
-        if SERIAL_MODE:
-            # buff = int.from_bytes(ser.read(), 'big')   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
-            buff = struct.unpack("<B", ser.read())[0]
-        
-        else:   # デバッグモード、擬似的に受信
-            buff = serStrDebug[serStrDebugNum][len(serBuffStr)] # 今取るべきバイトを取ってくる
-            if len(serBuffStr) == 5:    # 送信元データを受信した時
-                serBuffStr[4] = tweAddr[random.randint(0, ROBOT_NUM - 1)]    # 送信元をランダムにする
-            elif len(serBuffStr) >= 5 and len(serBuffStr) == 4 + serBuffStr[3] + 2 and serBuffStr[4] != 0x01:  # EOT => 2台目以降はCD修正（>=5はその後の条件式を通すため）
-                serBuffStr[len(serBuffStr) - 2] = cdBuff
-                
-        serBuffStr.append(buff)
-        if len(serBuffStr) > 4:    # データの範囲
-            if len(serBuffStr) <= 4 + serBuffStr[3]:    # データ終了まで
-                cdBuff = cdBuff ^ buff   # CD計算
-            elif len(serBuffStr) == 4 + serBuffStr[3] + 2:    # EOTまで終了
-                print("Packet Received")
-                if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTチェック
-                    print("EOT OK")
-                    if cdBuff == serBuffStr[len(serBuffStr) - 2]:
-                        print("CD OK")
-                    else:
-                        print("CD NG, Expected: " + hex(cdBuff) + ", Received: " + hex(serBuffStr[len(serBuffStr) - 2]))
-                else:
-                    print("EOT NG")
-                break
-    if serBuffStr != [] and len(serBuffStr) < 8:    # パケットが短すぎる場合は破棄
-        serBuffStr = []
-        print("Packet too short")
-    if serBuffStr != [] and serBuffStr[4] == 0xdb:   # 応答メッセージなので省略
-        serBuffStr = []
-        print("Response Message")
-    return serBuffStr
-
 # 管制・受信
 def TCDaemon():
     while True: # このループは1回の受信パケット＋データ解析ごと
         # 1パケット受信
-        serBuffStr = recvTWE()
+        serBuffStr = twelite.recvTWE(ser)
         
         # データ解析
         if serBuffStr != []:    # パケットが受信できたとき
@@ -191,11 +59,7 @@ def TCDaemon():
                 print("通信成立報告")
             print("")
             
-        if SERIAL_MODE:
-            time.sleep(0.001)
-        else:
-            time.sleep(0.5) # デバッグモードは実際に読んでいないので待機時間挟む
-
+        time.sleep(0.001)
 
 # ボタン操作からの管制への反映
 def compStart():
@@ -270,48 +134,41 @@ def windowDaemon():
 def connect():
     buttonConnect.grid_forget()
     
-    if SERIAL_MODE: # シリアル通信のとき
-        for i in range(ROBOT_NUM):  # 1台ずつ接続
-            if not connectStatus[i]:    # 未接続のとき
-                print("Connecting: " + str(i + 1))
-                sendTWE(0x78, 0x70, i + 1)
-                c = 0
-                while True:
-                    serBuffStr = recvTWE()
-                    # データ解析をするようにする
-                    if serBuffStr != []:    # パケットが受信できたとき
-                        if serBuffStr[5] == 0x30: # 通信成立報告
-                            if serBuffStr[6] == i + 1:
-                                print("Connected: " + str(i + 1))
-                                print("TWELITE address: " + hex(serBuffStr[4]))
-                                print()
-                                connectStatus[i] = True
-                                tweAddr[i] = serBuffStr[4]
-                                break
-                            else:
-                                print("Failed: " + str(i + 1) + "Received: " + str(serBuffStr[6]))
-                                print()
-                                break
-                    time.sleep(0.01)
-                    c += 1
-                    if c > 100:
-                        print("No Connection: " + str(i + 1))
-                        print()
-                        break
-    
-    else:
-        for i in range(ROBOT_NUM):
-            connectStatus[i] = True
-            sendTWE(0x78, 0x70, i + 1)
-            
+    for i in range(ROBOT_NUM):  # 1台ずつ接続
+        if not connectStatus[i]:    # 未接続のとき
+            print("Connecting: " + str(i + 1))
+            twelite.sendTWE(ser, 0x78, 0x70, i + 1)
+            c = 0
+            while True:
+                serBuffStr = twelite.recvTWE(ser)
+                # データ解析をするようにする
+                if serBuffStr != []:    # パケットが受信できたとき
+                    if serBuffStr[5] == 0x30: # 通信成立報告
+                        if serBuffStr[6] == i + 1:
+                            print("Connected: " + str(i + 1))
+                            print("TWELITE address: " + hex(serBuffStr[4]))
+                            print()
+                            connectStatus[i] = True
+                            tweAddr[i] = serBuffStr[4]
+                            break
+                        else:
+                            print("Failed: " + str(i + 1) + "Received: " + str(serBuffStr[6]))
+                            print()
+                            break
+                time.sleep(0.01)
+                c += 1
+                if c > 100:
+                    print("No Connection: " + str(i + 1))
+                    print()
+                    break
+
     buttonStart.grid(row=6,column=0,columnspan=2)
     
     if threadTC.is_alive() == False:    # 通信スレッドが動いていないとき（初回）
         threadTC.start()
 
 def exitTCApp():
-    if SERIAL_MODE:
-        ser.close()
+    ser.close()
     mainWindow.destroy()
 
 def keyPress(event):
@@ -331,46 +188,28 @@ def keyPress(event):
 # 以下メインルーチン
 
 # 初期化
-
 # シリアル通信（TWE-Lite）
-if SERIAL_MODE:
-    """
-    port_result = serial_ports_detect()
-    if port_result == []:   # ポートが見つからないとき
-        print("No port found")
-        exit()
-    elif port_result.count('/dev/ttyAMA0') > 0:   # Linuxのとき
-        use_port = '/dev/ttyAMA0'
-    else:   # Windowsのとき
-        if len(port_result) == 1:
-            use_port = port_result[0]
-        else:
-            for port in port_result:
-                print(port)
-                print("Enter the port number you want to use")
-                use_port = input()
-    """
-    port_result = serial_ports_detect()
-    if port_result == []:   # ポートが見つからないとき
-        print("No port found")
-        exit()
+port_result = twelite.serial_ports_detect()
+if port_result == []:   # ポートが見つからないとき
+    print("No port found")
+    exit()
+else:
+    if len(port_result) == 1:
+        use_port = port_result[0]
     else:
-        if len(port_result) == 1:
-            use_port = port_result[0]
-        else:
-            for port in port_result:
-                print(port)
-                print("Enter the port number you want to use")
-                use_port = input()
-                
-    print("Port " + use_port + " is used")
+        for port in port_result:
+            print(port)
+            print("Enter the port number you want to use")
+            use_port = input()
+            
+print("Port " + use_port + " is used")
 
-    ser = serial.Serial(use_port)
-    ser.baudrate = 115200
-    ser.parity = serial.PARITY_NONE
-    ser.bytesize = serial.EIGHTBITS
-    ser.stopbits = serial.STOPBITS_ONE
-    ser.timeout = None
+ser = serial.Serial(use_port)
+ser.baudrate = 115200
+ser.parity = serial.PARITY_NONE
+ser.bytesize = serial.EIGHTBITS
+ser.stopbits = serial.STOPBITS_ONE
+ser.timeout = None
 
 # ウィンドウの定義
 mainWindow = tk.Tk()
