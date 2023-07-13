@@ -69,13 +69,18 @@ def serial_ports_detect():
     return result
     """
     
-    result = []
-    ports = list(serial.tools.list_ports.comports())
-    for p in ports:
-        if p.vid == 0x0403 and p.pid == 0x6001:
-            result.append(p.device)
-            print(p.device)
-            print(p.serial_number)
+    if sys.platform.startswith('win'):
+        result = []
+        ports = list(serial.tools.list_ports.comports())
+        for p in ports:
+            if p.vid == 0x0403 and (p.pid == 0x6001 or p.pid == 0x6015): # TWE-Lite-R
+                result.append(p.device)
+                print(p.device)
+                print(p.serial_number)
+    elif sys.platform.startswith('linux'):
+        result = glob.glob('/dev/serial0')  # GPIO UART
+    else:
+        print('Unsupported platform')
     return result
 
 # 送信、toIDは0x78のときは全台
