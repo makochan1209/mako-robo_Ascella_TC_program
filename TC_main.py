@@ -189,7 +189,7 @@ def keyPress(event):
 
 # 初期化
 # シリアル通信（TWE-Lite）
-port_result = twelite.serial_ports_detect()
+port_result = twelite.twe_serial_ports_detect()
 if port_result == []:   # ポートが見つからないとき
     print("No port found")
     exit()
