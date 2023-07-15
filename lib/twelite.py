@@ -1,30 +1,77 @@
 import serial
 import sys
-import glob
 import struct
+import time
 
 import serial.tools.list_ports
 
+# [0xA5, 0x5A, 0x80, "Length", "Data", "CD", 0x04]の形式で受信
+# "Data": 0x0*（送信元）, Command, Data
+
+def twe_uart_setting(ser):
+    """
+    TWELITEに接続できるUART規格にシリアル通信オブジェクトを設定する関数。
+
+    Parameters
+    ----------
+    ser : シリアル通信オブジェクト
+    """
+    ser.baudrate = 115200
+    ser.parity = serial.PARITY_NONE
+    ser.bytesize = serial.EIGHTBITS
+    ser.stopbits = serial.STOPBITS_ONE
+    ser.timeout = None
+
 def twe_serial_ports_detect():
-    if sys.platform.startswith('win'):
-        result = []
+    """
+    TWELITEに接続されているシリアルポートを自動で検出する関数。返り値はポート名。
+    """
+    result = ""
+    if sys.platform.startswith('win') or sys.platform.startswith('linux'):
+        suggestPorts = []
         ports = list(serial.tools.list_ports.comports())
         for p in ports:
-            if p.vid == 0x0403 and (p.pid == 0x6001 or p.pid == 0x6015): # TWE-Lite-R
-                result.append(p.device)
-                print(p.device)
-                print(p.serial_number)
-    elif sys.platform.startswith('linux'):
-        result = glob.glob('/dev/serial0')  # GPIO UART
+            if (p.vid == 0x0403 and (p.pid == 0x6001 or p.pid == 0x6015)) or p.device == '/dev/serial0':    # TWE-Lite-R, Raspberry Pi => GPIO UART
+                ser = serial.Serial(p.device)
+                twe_uart_setting(ser)
+                sendResult = sendTWE(ser, 0x00, 0x00, 0x00)
+                if sendResult:
+                    suggestPorts.append(p.device)
+        
+        if len(suggestPorts) == 0:
+            print('TWELITE not found')
+        
+        else:
+            if len(suggestPorts) == 1:
+                print(suggestPorts[0])
+                result = suggestPorts[0]
+            else:
+                i = 1
+                for port in suggestPorts:
+                    print("i: ", port)
+                    i += 1
+                print("Enter the number or the port name you want to use")
+                result = input()
+                if result.isdigit():
+                    result = suggestPorts[int(result) - 1]
+        print("Port " + result + " is used")
+            
     else:
         print('Unsupported platform')
     return result
 
-# [0xA5, 0x5A, 0x80, "Length", "Data", "CD", 0x04]の形式で受信
-# "Data": 0x0*（送信元）, Command, Data
-# 送信、toIDは0x78のときは全台
-# tkinterから直接入力なので各引数は文字列であることに注意
 def sendTWE(ser, toID, command, data):
+    """
+    TWEから他のTWEへデータを送信する関数。返り値は成功したかどうかの真偽値。
+
+    Parameters
+    ----------
+    ser : シリアル通信オブジェクト
+    toID : 送信先論理ID、0x78のときは全台に送信
+    command : コマンド
+    data : データ（配列または1バイト）
+    """
+    result = False
     sendPacket = [0xA5, 0x5A, 0x80, 0x03, toID, command]
     if type(data) is complex:
         sendPacket[3] = 0x02 + len(data)
@@ -46,9 +93,25 @@ def sendTWE(ser, toID, command, data):
         # ser.write(sendPacket[i].to_bytes(1, 'big'))
         # ser.write(struct.pack("<B", sendPacket[i]))
     ser.write(b''.join([struct.pack("<B", val) for val in sendPacket]))
+
+    for i in range(0, 20):  # 1秒待つ
+        serBuffStr = recvTWE(ser, True)
+        if serBuffStr != []:
+            if serBuffStr[4] == 0xdb:   # リスポンスパケット
+                result = True
+                break
+        time.sleep(0.05)
+    return result
         
-# 1パケット受信（データは複数バイト可能の仕様）
-def recvTWE(ser):
+def recvTWE(ser, responcePacket = False):
+    """
+    TWEが受信したデータを返す関数。返り値は受信したデータの配列。受信していない場合は空配列。
+
+    Parameters
+    ----------
+    ser : シリアル通信オブジェクト
+    responcePacket : リスポンスパケットを省略するかどうか
+    """
     # 値の初期化
     cdBuff = 0
     serBuffStr = []
@@ -80,6 +143,7 @@ def recvTWE(ser):
         serBuffStr = []
         print("Packet too short")
     if serBuffStr != [] and serBuffStr[4] == 0xdb:   # 応答メッセージなので省略
-        serBuffStr = []
-        print("Response Message")
+        if not responcePacket:  # リスポンスパケットを省略する場合は破棄
+            serBuffStr = []
+        print("Response Packet")
     return serBuffStr
