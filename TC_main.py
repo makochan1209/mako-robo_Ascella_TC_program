@@ -10,7 +10,7 @@ import threading
 
 import serial.tools.list_ports
 
-import lib.twelite as twelite
+import twelite
 
 # グリッドの大きさ
 GRID_WIDTH = 40

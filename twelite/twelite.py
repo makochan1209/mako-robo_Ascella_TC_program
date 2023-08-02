@@ -5,6 +5,8 @@ import time
 
 import serial.tools.list_ports
 
+class Sample: pass # 空のクラス
+
 # [0xA5, 0x5A, 0x80, "Length", "Data", "CD", 0x04]の形式で受信
 # "Data": 0x0*（送信元）, Command, Data
 
@@ -20,7 +22,7 @@ def twe_uart_setting(ser):
     ser.parity = serial.PARITY_NONE
     ser.bytesize = serial.EIGHTBITS
     ser.stopbits = serial.STOPBITS_ONE
-    ser.timeout = None
+    ser.timeout = 0.01
 
 def twe_serial_ports_detect():
     """
@@ -73,14 +75,12 @@ def sendTWE(ser, toID, command, data):
     """
     result = False
     sendPacket = [0xA5, 0x5A, 0x80, 0x03, toID, command]
-    if type(data) is complex:
+    if isinstance(data, list):
         sendPacket[3] = 0x02 + len(data)
-        # sendPacket.extend([int(s, 0) for s in data])
         sendPacket.extend(data)
         sendPacket.extend(["CD"])
 
     else:
-        # sendPacket.extend([int(data, 0), "CD"])
         sendPacket.extend([data, "CD"])
     
     cdBuff = 0
@@ -90,14 +90,12 @@ def sendTWE(ser, toID, command, data):
         elif (i == len(sendPacket) - 1):
             sendPacket[i] = cdBuff
         
-        # ser.write(sendPacket[i].to_bytes(1, 'big'))
-        # ser.write(struct.pack("<B", sendPacket[i]))
     ser.write(b''.join([struct.pack("<B", val) for val in sendPacket]))
 
     for i in range(0, 20):  # 1秒待つ
-        serBuffStr = recvTWE(ser, True)
-        if serBuffStr != []:
-            if serBuffStr[4] == 0xdb:   # リスポンスパケット
+        tweResult = recvTWE(ser, True)
+        if tweResult.address != "":
+            if tweResult.address == 0xdb:   # リスポンスパケット
                 result = True
                 break
         time.sleep(0.05)
@@ -105,45 +103,59 @@ def sendTWE(ser, toID, command, data):
         
 def recvTWE(ser, responcePacket = False):
     """
-    TWEが受信したデータを返す関数。返り値は受信したデータの配列。受信していない場合は空配列。
+    TWEが受信したデータを返す関数。返り値は受信したデータのオブジェクト。
 
     Parameters
     ----------
     ser : シリアル通信オブジェクト
-    responcePacket : リスポンスパケットを省略するかどうか
+    responcePacket : リスポンスパケットを出力するかどうか（省略時はFalse, 出力せず省略する）
+    
+    Returns
+    -------
+    address : 送信元論理ID
+    command : コマンド
+    data : データ（配列）
     """
     # 値の初期化
     cdBuff = 0
     serBuffStr = []
+    result = Sample()
     
     # データ受信
-    
-    while ser.in_waiting > 0: # データが来ているか・またはデバッグモードのとき。このループは1バイトごと、パケット受信完了でbreak
-        # buff = int.from_bytes(ser.read(), 'big')   # read関数は1byteずつ読み込む、多分文字が来るまで待つはず
-        buff = struct.unpack("<B", ser.read())[0]
+    if ser.in_waiting > 0: # データが来ているとき。パケット受信完了でbreak
+        buffByteArray = ser.read_until("\x04") # EOTまで読み込み
+        serBuffStr = [val for val in buffByteArray]
         
-        serBuffStr.append(buff)
-        if len(serBuffStr) > 4:    # データの範囲
-            if len(serBuffStr) <= 4 + serBuffStr[3]:    # データ終了まで
-                cdBuff = cdBuff ^ buff   # CD計算
-            elif len(serBuffStr) == 4 + serBuffStr[3] + 2:    # EOTまで終了
-                print("Packet Received")
-                print("Recieved Data:")
-                print([hex(i) for i in serBuffStr])
-                if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTチェック
-                    print("EOT OK")
-                    if cdBuff == serBuffStr[len(serBuffStr) - 2]:
-                        print("CD OK")
-                    else:
-                        print("CD NG, Expected: " + hex(cdBuff) + ", Received: " + hex(serBuffStr[len(serBuffStr) - 2]))
-                else:
-                    print("EOT NG")
-                break
+        print("Packet Received")
+        print("Recieved Data:")
+        print([hex(i) for i in serBuffStr])
+        if serBuffStr[len(serBuffStr) - 1] == 0x04: # EOTが来ているとき
+            print("EOT OK")
+            for i in range(4, len(serBuffStr) - 2): # CDの計算
+                cdBuff = cdBuff ^ serBuffStr[i]
+            if cdBuff == serBuffStr[len(serBuffStr) - 2]:   # CDが正しいとき
+                print("CD OK: " + hex(cdBuff))
+            else:   # CDが正しくないとき
+                print("CD NG, Expected: " + hex(cdBuff) + ", Received: " + hex(serBuffStr[len(serBuffStr) - 2]))
+        else:
+            print("EOT NG")
+            serBuffStr = []
+        
     if serBuffStr != [] and len(serBuffStr) < 8:    # パケットが短すぎる場合は破棄
         serBuffStr = []
         print("Packet too short")
-    if serBuffStr != [] and serBuffStr[4] == 0xdb:   # 応答メッセージなので省略
+    elif serBuffStr != [] and serBuffStr[4] == 0xdb:   # 応答メッセージなので省略
         if not responcePacket:  # リスポンスパケットを省略する場合は破棄
             serBuffStr = []
         print("Response Packet")
-    return serBuffStr
+
+    # データ解析
+    if serBuffStr != []:
+        result.address = serBuffStr[4]
+        result.command = serBuffStr[5]
+        result.data = serBuffStr[6:len(serBuffStr) - 2]
+    else:
+        result.address = ""
+        result.command = ""
+        result.data = []
+    return result
